@@ -1,122 +1,126 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState, useEffect } from 'react';
+import { getHealthStatus } from './services/healthService';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [healthData, setHealthData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchHealth = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await getHealthStatus();
+      setHealthData(data);
+    } catch (err) {
+      setError(
+        err.message || 'Unable to connect to backend server. Make sure it is running on http://localhost:5001'
+      );
+      setHealthData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getHealthStatus()
+      .then((data) => {
+        if (isMounted) {
+          setHealthData(data);
+          setError(null);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          setError(
+            err.message || 'Unable to connect to backend server. Make sure it is running on http://localhost:5001'
+          );
+          setHealthData(null);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app-container">
+      <header className="app-header">
+        <span className="env-badge">Dev Mode</span>
+        <h1>SkillForge</h1>
+        <p className="subtitle">Backend Connection &amp; Health Status</p>
+      </header>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <main className="status-card">
+        <div className="card-header">
+          <h2>Server Health Check</h2>
+          <span className="target-url">GET /api/health</span>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        {loading && (
+          <div className="status-box loading">
+            <div className="spinner"></div>
+            <p>Checking connection to backend server...</p>
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="status-box error">
+            <div className="status-header">
+              <span className="status-dot error-dot"></span>
+              <h3>Connection Failed</h3>
+            </div>
+            <p className="error-message">{error}</p>
+            <p className="troubleshoot-tip">
+              Tip: Verify that your backend server is running on <code>http://localhost:5001</code>.
+            </p>
+            <button type="button" className="btn-action btn-retry" onClick={fetchHealth}>
+              Retry Connection
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && healthData && (
+          <div className="status-box success">
+            <div className="status-header">
+              <span className="status-dot success-dot"></span>
+              <h3>Connected to Backend</h3>
+            </div>
+
+            <div className="info-grid">
+              <div className="info-row">
+                <span className="info-label">Status</span>
+                <span className="status-pill">{healthData.status}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Message</span>
+                <span className="info-value">{healthData.message}</span>
+              </div>
+              <div className="info-row">
+                <span className="info-label">Timestamp</span>
+                <span className="info-value">{new Date(healthData.timestamp).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <button type="button" className="btn-action btn-refresh" onClick={fetchHealth}>
+              Refresh Health Status
+            </button>
+          </div>
+        )}
+      </main>
+
+      <footer className="app-footer">
+        <p>SkillForge &bull; Client-Server Integration Test</p>
+      </footer>
+    </div>
+  );
 }
 
-export default App
+export default App;
