@@ -117,12 +117,10 @@ export const loginUser = async (req, res) => {
     }
 
     // 5. Generate JWT token
-
     const jwtSecret = process.env.JWT_SECRET;
-
     if (!jwtSecret) {
       throw new Error('JWT_SECRET is not configured');
-    };
+    }
 
     const token = jwt.sign(
       { id: user._id },
@@ -145,6 +143,38 @@ export const loginUser = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: 'Server error during login',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get current user profile
+ * GET /api/users/profile
+ */
+export const getProfile = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user) {
+      return res.status(401).json({
+        message: 'Not authorized'
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Profile fetched successfully',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Server error while fetching profile',
       error: error.message
     });
   }
