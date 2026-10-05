@@ -1,3 +1,4 @@
+import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/user.model.js';
 
@@ -69,6 +70,81 @@ export const registerUser = async (req, res) => {
 
     return res.status(500).json({
       message: 'Server error during user registration',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Authenticate user and return JWT
+ * POST /api/users/login
+ */
+export const loginUser = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // 1. Validate required fields
+    if (
+      !email ||
+      !password ||
+      typeof email !== 'string' ||
+      typeof password !== 'string' ||
+      !email.trim() ||
+      !password.trim()
+    ) {
+      return res.status(400).json({
+        message: 'Email and password are required fields'
+      });
+    }
+
+    // 2. Normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // 3. Find user by email
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(401).json({
+        message: 'Invalid email or password'
+      });
+    }
+
+    // 4. Compare supplied password with stored hashed password
+    const isPasswordMatch = await bcrypt.compare(password, user.password);
+    if (!isPasswordMatch) {
+      return res.status(401).json({
+        message: 'Invalid email or password'
+      });
+    }
+
+    // 5. Generate JWT token
+
+    const jwtSecret = process.env.JWT_SECRET;
+
+    if (!jwtSecret) {
+      throw new Error('JWT_SECRET is not configured');
+    };
+
+    const token = jwt.sign(
+      { id: user._id },
+      jwtSecret,
+      { expiresIn: '7d' }
+    );
+
+    // 6. Return response with token and user details (excluding password)
+    return res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Server error during login',
       error: error.message
     });
   }
