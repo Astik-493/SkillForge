@@ -7,7 +7,7 @@ const careerGoalSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
-      unique: true // Ensures each user has only one active career goal
+      unique: true 
     },
     targetRole: {
       type: String,
