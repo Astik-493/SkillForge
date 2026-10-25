@@ -1,126 +1,100 @@
 import { useState, useEffect } from 'react';
-import { getHealthStatus } from './services/healthService';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './context/useAuth';
+import Navbar from './components/Navbar';
+import LoginPage from './components/LoginPage';
+import RegisterPage from './components/RegisterPage';
+import DashboardPage from './components/DashboardPage';
 import './App.css';
+import './styles/auth.css';
 
-function App() {
-  const [healthData, setHealthData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+function AppShell() {
+  const { isAuthenticated, loading } = useAuth();
 
-  const fetchHealth = async () => {
-    setLoading(true);
-    setError(null);
+  // Initialize path from browser URL, defaulting to /login or /dashboard
+  const [currentPath, setCurrentPath] = useState(() => {
+    const path = window.location.pathname;
+    if (path === '/register') return '/register';
+    if (path === '/dashboard') return '/dashboard';
+    return '/login';
+  });
 
-    try {
-      const data = await getHealthStatus();
-      setHealthData(data);
-    } catch (err) {
-      setError(
-        err.message || 'Unable to connect to backend server. Make sure it is running on http://localhost:5001'
-      );
-      setHealthData(null);
-    } finally {
-      setLoading(false);
+  const [navigationState, setNavigationState] = useState(null);
+
+  // Navigate helper that updates state and pushState for browser history
+  const navigate = (path, state = null) => {
+    setCurrentPath(path);
+    setNavigationState(state);
+    if (window.location.pathname !== path) {
+      window.history.pushState(state, '', path);
     }
   };
 
+  // Sync with browser back/forward buttons
   useEffect(() => {
-    let isMounted = true;
-
-    getHealthStatus()
-      .then((data) => {
-        if (isMounted) {
-          setHealthData(data);
-          setError(null);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          setError(
-            err.message || 'Unable to connect to backend server. Make sure it is running on http://localhost:5001'
-          );
-          setHealthData(null);
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isMounted = false;
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (['/login', '/register', '/dashboard'].includes(path)) {
+        setCurrentPath(path);
+      }
     };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Compute active page with route protection
+  const activePath = (() => {
+    if (loading) return currentPath;
+    if (isAuthenticated && (currentPath === '/login' || currentPath === '/register')) {
+      return '/dashboard';
+    }
+    if (!isAuthenticated && currentPath === '/dashboard') {
+      return '/login';
+    }
+    return currentPath;
+  })();
+
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <span className="env-badge">Dev Mode</span>
-        <h1>SkillForge</h1>
-        <p className="subtitle">Backend Connection &amp; Health Status</p>
-      </header>
+    <>
+      <Navbar currentPath={activePath} onNavigate={navigate} />
 
-      <main className="status-card">
-        <div className="card-header">
-          <h2>Server Health Check</h2>
-          <span className="target-url">GET /api/health</span>
-        </div>
+      <div className="app-container">
+        <header className="app-header">
+          <span className="env-badge">Milestone 14A</span>
+          <h1>SkillForge</h1>
+          <p className="subtitle">Student Skill Gap Engine &amp; Learning Roadmap</p>
+        </header>
 
-        {loading && (
-          <div className="status-box loading">
-            <div className="spinner"></div>
-            <p>Checking connection to backend server...</p>
-          </div>
-        )}
-
-        {!loading && error && (
-          <div className="status-box error">
-            <div className="status-header">
-              <span className="status-dot error-dot"></span>
-              <h3>Connection Failed</h3>
+        <main className="content-area">
+          {loading ? (
+            <div className="status-box loading">
+              <div className="spinner"></div>
+              <p>Loading SkillForge...</p>
             </div>
-            <p className="error-message">{error}</p>
-            <p className="troubleshoot-tip">
-              Tip: Verify that your backend server is running on <code>http://localhost:5001</code>.
-            </p>
-            <button type="button" className="btn-action btn-retry" onClick={fetchHealth}>
-              Retry Connection
-            </button>
-          </div>
-        )}
+          ) : (
+            <>
+              {activePath === '/register' && <RegisterPage onNavigate={navigate} />}
+              {activePath === '/login' && (
+                <LoginPage onNavigate={navigate} navigationState={navigationState} />
+              )}
+              {activePath === '/dashboard' && <DashboardPage onNavigate={navigate} />}
+            </>
+          )}
+        </main>
 
-        {!loading && !error && healthData && (
-          <div className="status-box success">
-            <div className="status-header">
-              <span className="status-dot success-dot"></span>
-              <h3>Connected to Backend</h3>
-            </div>
-
-            <div className="info-grid">
-              <div className="info-row">
-                <span className="info-label">Status</span>
-                <span className="status-pill">{healthData.status}</span>
-              </div>
-              <div className="info-row">
-                <span className="info-label">Message</span>
-                <span className="info-value">{healthData.message}</span>
-              </div>
-              <div className="info-row">
-                <span className="info-label">Timestamp</span>
-                <span className="info-value">{new Date(healthData.timestamp).toLocaleString()}</span>
-              </div>
-            </div>
-
-            <button type="button" className="btn-action btn-refresh" onClick={fetchHealth}>
-              Refresh Health Status
-            </button>
-          </div>
-        )}
-      </main>
-
-      <footer className="app-footer">
-        <p>SkillForge &bull; Client-Server Integration Test</p>
-      </footer>
-    </div>
+        <footer className="app-footer">
+          <p>SkillForge &bull; Client Authentication &amp; Dashboard Session</p>
+        </footer>
+      </div>
+    </>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  );
+}
