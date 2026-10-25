@@ -1,117 +1,165 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/useAuth';
-import { getHealthStatus } from '../services/healthService';
+import { fetchSkills } from '../services/skillService';
+import { fetchCareerGoal } from '../services/careerGoalService';
+import SkillForm from './SkillForm';
+import SkillItem from './SkillItem';
 
-export function DashboardPage({ onNavigate }) {
-  const { user, logout } = useAuth();
+export function DashboardPage() {
+  const { user } = useAuth();
 
-  const [healthData, setHealthData] = useState(null);
-  const [checkingHealth, setCheckingHealth] = useState(false);
-  const [healthError, setHealthError] = useState(null);
+  const [skills, setSkills] = useState([]);
+  const [targetRole, setTargetRole] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const checkHealth = async () => {
-    setCheckingHealth(true);
-    setHealthError(null);
-    try {
-      const data = await getHealthStatus();
-      setHealthData(data);
-    } catch (err) {
-      setHealthError(err.message || 'Health check failed');
-    } finally {
-      setCheckingHealth(false);
+  // Load user's skills and career goal on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboardData() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const [skillsData, careerGoalData] = await Promise.allSettled([
+          fetchSkills(),
+          fetchCareerGoal()
+        ]);
+
+        if (!isMounted) return;
+
+        if (skillsData.status === 'fulfilled') {
+          setSkills(skillsData.value || []);
+        } else {
+          setError(
+            skillsData.reason?.message || 'Unable to load skills from server.'
+          );
+        }
+
+        if (careerGoalData.status === 'fulfilled' && careerGoalData.value) {
+          setTargetRole(careerGoalData.value.targetRole || null);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message || 'Error loading dashboard data.');
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     }
+
+    loadDashboardData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSkillAdded = (newSkill) => {
+    setSkills((prev) => {
+      // If skill already exists (case-insensitive), update it; otherwise add to top
+      const existingIdx = prev.findIndex(
+        (s) => s.name.toLowerCase() === newSkill.name.toLowerCase()
+      );
+      if (existingIdx !== -1) {
+        const updated = [...prev];
+        updated[existingIdx] = newSkill;
+        return updated;
+      }
+      return [newSkill, ...prev];
+    });
   };
 
-  const handleLogout = () => {
-    logout();
-    onNavigate('/login');
+  const handleSkillUpdated = (updatedSkill) => {
+    setSkills((prev) =>
+      prev.map((s) => (s._id === updatedSkill._id ? updatedSkill : s))
+    );
+  };
+
+  const handleSkillDeleted = (deletedId) => {
+    setSkills((prev) => prev.filter((s) => s._id !== deletedId));
   };
 
   const initials = user?.name
     ? user.name
         .split(' ')
-        .map((part) => part[0])
+        .map((p) => p[0])
         .join('')
         .slice(0, 2)
     : 'U';
 
   return (
-    <div className="dashboard-card">
-      <div className="user-banner">
-        <div className="user-avatar" aria-label="User avatar">
-          {initials}
-        </div>
-        <div className="user-meta">
-          <h3>{user?.name || 'SkillForge User'}</h3>
-          <p>{user?.email || 'Authenticated Account'}</p>
-        </div>
-      </div>
-
-      <div className="dashboard-sections">
-        <div className="dashboard-box">
-          <span className="dashboard-box-title">Session Security</span>
-          <div className="session-info">
-            <span>Status:</span>
-            <span className="badge-active">
-              <span className="badge-dot"></span>
-              JWT Authenticated
-            </span>
-          </div>
-          <div className="session-info">
-            <span>User ID:</span>
-            <code>{user?._id || user?.id || 'Active'}</code>
+    <div className="dashboard-container">
+      {/* 1. User Profile Overview */}
+      <section className="profile-overview-card" aria-label="User Profile">
+        <div className="profile-main">
+          <div className="profile-avatar">{initials}</div>
+          <div className="profile-details">
+            <h2>{user?.name || 'SkillForge User'}</h2>
+            <p className="profile-email">{user?.email || 'Authenticated User'}</p>
           </div>
         </div>
 
-        <div className="dashboard-box">
-          <span className="dashboard-box-title">Milestone 14A Status</span>
-          <p className="placeholder-note">
-            Authentication successfully verified. User registration, secure login, and
-            JWT storage in <code>localStorage</code> are fully active. Skills management
-            and learning roadmaps will be mounted here in future milestones.
-          </p>
+        <div className="profile-role-badge">
+          <span className="role-label">Target Role</span>
+          {targetRole ? (
+            <span className="role-value">{targetRole}</span>
+          ) : (
+            <span className="role-value none">No target role selected yet</span>
+          )}
+        </div>
+      </section>
+
+      {/* 2. Skills Section */}
+      <section className="skills-section" aria-label="Skills Management">
+        <div className="section-header-row">
+          <h3>My Skills</h3>
+          <span className="count-pill">{skills.length} tracked</span>
         </div>
 
-        {healthData && (
-          <div className="dashboard-box">
-            <span className="dashboard-box-title">Backend Connection</span>
-            <div className="session-info">
-              <span>Server Message:</span>
-              <span>{healthData.message}</span>
-            </div>
-            <div className="session-info">
-              <span>Health Status:</span>
-              <span className="status-pill">{healthData.status}</span>
-            </div>
+        {/* Add Skill Form */}
+        <SkillForm onSkillAdded={handleSkillAdded} />
+
+        {/* Loading State */}
+        {loading && (
+          <div className="status-box loading">
+            <div className="spinner"></div>
+            <p>Loading your skills...</p>
           </div>
         )}
 
-        {healthError && (
-          <div className="alert alert-error">
+        {/* Error State */}
+        {!loading && error && (
+          <div className="alert alert-error" role="alert">
             <span className="alert-icon">⚠️</span>
-            <span>{healthError}</span>
+            <span>{error}</span>
           </div>
         )}
-      </div>
 
-      <div className="dashboard-actions">
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={checkHealth}
-          disabled={checkingHealth}
-        >
-          {checkingHealth ? 'Checking...' : 'Check Server Health'}
-        </button>
+        {/* Empty State */}
+        {!loading && !error && skills.length === 0 && (
+          <div className="empty-skills-box">
+            <div className="empty-icon">🎯</div>
+            <h4>No skills added yet</h4>
+            <p>Add your first skill above to begin tracking your proficiencies.</p>
+          </div>
+        )}
 
-        <button
-          type="button"
-          className="btn-logout"
-          onClick={handleLogout}
-        >
-          Sign Out
-        </button>
-      </div>
+        {/* Skills List */}
+        {!loading && skills.length > 0 && (
+          <div className="skills-list" role="list">
+            {skills.map((skill) => (
+              <SkillItem
+                key={skill._id}
+                skill={skill}
+                onSkillUpdated={handleSkillUpdated}
+                onSkillDeleted={handleSkillDeleted}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

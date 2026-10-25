@@ -53,6 +53,10 @@ export async function apiFetch(endpoint, options = {}) {
   }
 
   if (!response.ok) {
+    if (response.status === 401 && !cleanEndpoint.includes('/users/login')) {
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    }
+
     const errorMessage =
       (data && data.message) ||
       `Request failed with status ${response.status} (${response.statusText || 'Error'})`;

@@ -38,8 +38,17 @@ export function AuthProvider({ children }) {
         });
     }
 
+    const handleUnauthorized = () => {
+      clearAuth();
+      setTokenState(null);
+      setUserState(null);
+    };
+
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('auth:unauthorized', handleUnauthorized);
     };
   }, []);
 
