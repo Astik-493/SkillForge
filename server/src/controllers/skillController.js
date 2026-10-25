@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import Skill from '../models/skill.model.js';
+import CareerGoal from '../models/careerGoal.model.js';
+import { ROLE_REQUIREMENTS } from '../config/roleRequirements.js';
 
 /**
  * Add a new skill for the authenticated user
@@ -217,6 +219,107 @@ export const deleteSkill = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: 'Server error while deleting skill',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Calculate skill gaps for authenticated user based on their career goal
+ * GET /api/skills/gaps
+ */
+export const getSkillGaps = async (req, res) => {
+  try {
+    // 1. Get authenticated user's career goal
+    const careerGoal = await CareerGoal.findOne({ user: req.user._id });
+
+    // 2. If no career goal exists, return 404
+    if (!careerGoal || !careerGoal.targetRole) {
+      return res.status(404).json({
+        message: 'No career goal found. Please select a target role first.'
+      });
+    }
+
+    const targetRole = careerGoal.targetRole;
+
+    // 3. Get role requirements
+    const roleRequirements = ROLE_REQUIREMENTS[targetRole];
+    if (!roleRequirements) {
+      return res.status(404).json({
+        message: `Role requirements not found for target role: ${targetRole}`
+      });
+    }
+
+    // 4. Fetch only the authenticated user's skills
+    const userSkills = await Skill.find({ user: req.user._id });
+
+    // Map user skills for case-insensitive lookup
+    const userSkillMap = new Map();
+    userSkills.forEach((s) => {
+      userSkillMap.set(s.name.trim().toLowerCase(), s.proficiency);
+    });
+
+    // 5. Compare every required skill against current proficiency
+    let achievedSkillsCount = 0;
+    let skillsNeedingImprovementCount = 0;
+    let missingSkillsCount = 0;
+
+    const gaps = Object.entries(roleRequirements).map(([skillName, requiredProficiency]) => {
+      const normalizedSkill = skillName.trim().toLowerCase();
+      const hasSkill = userSkillMap.has(normalizedSkill);
+      const currentProficiency = hasSkill ? userSkillMap.get(normalizedSkill) : 0;
+
+      let status;
+      if (!hasSkill) {
+        status = 'missing';
+        missingSkillsCount++;
+      } else if (currentProficiency < requiredProficiency) {
+        status = 'needs_improvement';
+        skillsNeedingImprovementCount++;
+      } else {
+        status = 'achieved';
+        achievedSkillsCount++;
+      }
+
+      // Gap calculation: never negative
+      const gap = Math.max(0, requiredProficiency - currentProficiency);
+
+      return {
+        skill: skillName,
+        currentProficiency,
+        requiredProficiency,
+        gap,
+        status
+      };
+    });
+
+    // 10. Sort results by largest gap first
+    gaps.sort((a, b) => b.gap - a.gap || a.skill.localeCompare(b.skill));
+
+    const totalRequiredSkills = Object.keys(roleRequirements).length;
+
+    const summary = {
+      targetRole,
+      totalRequiredSkills,
+      achievedSkillsCount,
+      skillsNeedingImprovementCount,
+      missingSkillsCount
+    };
+
+    return res.status(200).json({
+      message: 'Skill gaps calculated successfully',
+      targetRole,
+      summary,
+      totalRequiredSkills,
+      achievedSkillsCount,
+      skillsNeedingImprovementCount,
+      missingSkillsCount,
+      gaps,
+      skillGaps: gaps
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Server error while calculating skill gaps',
       error: error.message
     });
   }

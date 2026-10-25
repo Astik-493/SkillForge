@@ -3,7 +3,8 @@ import {
   addSkill,
   getSkills,
   updateSkill,
-  deleteSkill
+  deleteSkill,
+  getSkillGaps
 } from '../controllers/skillController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -11,6 +12,9 @@ const router = express.Router();
 
 // Apply auth middleware to all skill routes
 router.use(protect);
+
+// GET /api/skills/gaps - Get skill gaps based on career goal
+router.get('/gaps', getSkillGaps);
 
 // POST /api/skills - Add skill
 router.post('/', addSkill);
