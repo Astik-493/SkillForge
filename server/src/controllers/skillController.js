@@ -225,6 +225,64 @@ export const deleteSkill = async (req, res) => {
 };
 
 /**
+ * Shared helper to calculate skill gaps based on role requirements and user skills
+ */
+export const calculateSkillGaps = (roleRequirements, userSkills = []) => {
+  // Map user skills for case-insensitive lookup
+  const userSkillMap = new Map();
+  userSkills.forEach((s) => {
+    userSkillMap.set(s.name.trim().toLowerCase(), s.proficiency);
+  });
+
+  // Compare every required skill against current proficiency
+  let achievedSkillsCount = 0;
+  let skillsNeedingImprovementCount = 0;
+  let missingSkillsCount = 0;
+
+  const gaps = Object.entries(roleRequirements).map(([skillName, requiredProficiency]) => {
+    const normalizedSkill = skillName.trim().toLowerCase();
+    const hasSkill = userSkillMap.has(normalizedSkill);
+    const currentProficiency = hasSkill ? userSkillMap.get(normalizedSkill) : 0;
+
+    let status;
+    if (!hasSkill) {
+      status = 'missing';
+      missingSkillsCount++;
+    } else if (currentProficiency < requiredProficiency) {
+      status = 'needs_improvement';
+      skillsNeedingImprovementCount++;
+    } else {
+      status = 'achieved';
+      achievedSkillsCount++;
+    }
+
+    // Gap calculation: never negative
+    const gap = Math.max(0, requiredProficiency - currentProficiency);
+
+    return {
+      skill: skillName,
+      currentProficiency,
+      requiredProficiency,
+      gap,
+      status
+    };
+  });
+
+  // Sort results by largest gap first
+  gaps.sort((a, b) => b.gap - a.gap || a.skill.localeCompare(b.skill));
+
+  const totalRequiredSkills = Object.keys(roleRequirements).length;
+
+  return {
+    gaps,
+    totalRequiredSkills,
+    achievedSkillsCount,
+    skillsNeedingImprovementCount,
+    missingSkillsCount
+  };
+};
+
+/**
  * Calculate skill gaps for authenticated user based on their career goal
  * GET /api/skills/gaps
  */
@@ -253,50 +311,13 @@ export const getSkillGaps = async (req, res) => {
     // 4. Fetch only the authenticated user's skills
     const userSkills = await Skill.find({ user: req.user._id });
 
-    // Map user skills for case-insensitive lookup
-    const userSkillMap = new Map();
-    userSkills.forEach((s) => {
-      userSkillMap.set(s.name.trim().toLowerCase(), s.proficiency);
-    });
-
-    // 5. Compare every required skill against current proficiency
-    let achievedSkillsCount = 0;
-    let skillsNeedingImprovementCount = 0;
-    let missingSkillsCount = 0;
-
-    const gaps = Object.entries(roleRequirements).map(([skillName, requiredProficiency]) => {
-      const normalizedSkill = skillName.trim().toLowerCase();
-      const hasSkill = userSkillMap.has(normalizedSkill);
-      const currentProficiency = hasSkill ? userSkillMap.get(normalizedSkill) : 0;
-
-      let status;
-      if (!hasSkill) {
-        status = 'missing';
-        missingSkillsCount++;
-      } else if (currentProficiency < requiredProficiency) {
-        status = 'needs_improvement';
-        skillsNeedingImprovementCount++;
-      } else {
-        status = 'achieved';
-        achievedSkillsCount++;
-      }
-
-      // Gap calculation: never negative
-      const gap = Math.max(0, requiredProficiency - currentProficiency);
-
-      return {
-        skill: skillName,
-        currentProficiency,
-        requiredProficiency,
-        gap,
-        status
-      };
-    });
-
-    // 10. Sort results by largest gap first
-    gaps.sort((a, b) => b.gap - a.gap || a.skill.localeCompare(b.skill));
-
-    const totalRequiredSkills = Object.keys(roleRequirements).length;
+    const {
+      gaps,
+      totalRequiredSkills,
+      achievedSkillsCount,
+      skillsNeedingImprovementCount,
+      missingSkillsCount
+    } = calculateSkillGaps(roleRequirements, userSkills);
 
     const summary = {
       targetRole,
@@ -324,3 +345,4 @@ export const getSkillGaps = async (req, res) => {
     });
   }
 };
+
