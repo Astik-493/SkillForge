@@ -44,6 +44,19 @@ export async function addSkill({ name, proficiency }) {
 }
 
 /**
+ * Add or update multiple skills in batch for the authenticated user.
+ * Connects to POST /api/skills/batch.
+ * @param {Array<{ name: string, proficiency: number }>} skills
+ * @returns {Promise<{ message: string, addedCount: number, updatedCount: number, skills: Array<object> }>}
+ */
+export async function addSkillsBatch(skills) {
+  return apiFetch('/skills/batch', {
+    method: 'POST',
+    body: JSON.stringify({ skills })
+  });
+}
+
+/**
  * Update an existing skill's name and/or proficiency.
  * Connects to PATCH /api/skills/:id.
  * @param {string} id - Skill ID

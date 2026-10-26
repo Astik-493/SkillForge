@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../context/useAuth';
+import AuthBrandPanel from './AuthBrandPanel';
 
 export function RegisterPage({ onNavigate }) {
   const { register } = useAuth();
@@ -61,104 +62,117 @@ export function RegisterPage({ onNavigate }) {
   };
 
   return (
-    <div className="auth-card">
-      <div className="auth-header">
-        <h2>Create an Account</h2>
-        <p className="auth-subtitle">Join SkillForge to track skills and career roadmaps</p>
-      </div>
+    <div className="auth-wrapper">
+      <div className="auth-card">
+        <AuthBrandPanel />
 
-      <form className="auth-form" onSubmit={handleSubmit} noValidate>
-        {error && (
-          <div className="alert alert-error" role="alert">
-            <span className="alert-icon">⚠️</span>
-            <span>{error}</span>
+        <div className="auth-form-panel">
+          <div className="auth-form-header">
+            <h2 className="auth-form-title">Create an account</h2>
+            <p className="auth-form-subtitle">
+              Join SkillForge to benchmark your skills, track gaps, and unlock customized roadmaps.
+            </p>
           </div>
-        )}
 
-        {successMessage && (
-          <div className="alert alert-success" role="status">
-            <span className="alert-icon">✓</span>
-            <span>{successMessage}</span>
+          <form className="auth-form" onSubmit={handleSubmit} noValidate>
+            {error && (
+              <div className="alert alert-error" role="alert">
+                <span className="alert-icon">⚠️</span>
+                <span>{error}</span>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="alert alert-success" role="status">
+                <span className="alert-icon">✓</span>
+                <span>{successMessage}</span>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="register-name">
+                Full Name
+              </label>
+              <input
+                id="register-name"
+                type="text"
+                className="form-input"
+                placeholder="e.g. Alex Johnson"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={loading}
+                required
+                autoComplete="name"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="register-email">
+                Email Address
+              </label>
+              <input
+                id="register-email"
+                type="email"
+                className="form-input"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                required
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="form-group">
+              <div className="form-label-row">
+                <label className="form-label" htmlFor="register-password">
+                  Password
+                </label>
+                <span className="form-helper-text">At least 6 characters</span>
+              </div>
+              <input
+                id="register-password"
+                type="password"
+                className="form-input"
+                placeholder="Create a secure password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
+                autoComplete="new-password"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn-submit"
+              disabled={loading || Boolean(successMessage)}
+              id="register-submit-button"
+            >
+              {loading ? (
+                <>
+                  <span className="btn-spinner"></span>
+                  <span>Creating your account...</span>
+                </>
+              ) : (
+                'Create Your Free Account'
+              )}
+            </button>
+          </form>
+
+          <div className="auth-footer">
+            <span className="auth-footer-text">Already have a SkillForge account?</span>{' '}
+            <button
+              type="button"
+              className="auth-link"
+              onClick={() => onNavigate('/login')}
+              disabled={loading}
+              id="switch-to-login-button"
+            >
+              Sign In
+            </button>
           </div>
-        )}
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="register-name">
-            Full Name
-          </label>
-          <input
-            id="register-name"
-            type="text"
-            className="form-input"
-            placeholder="e.g. Alex Johnson"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={loading}
-            required
-            autoComplete="name"
-          />
         </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="register-email">
-            Email Address
-          </label>
-          <input
-            id="register-email"
-            type="email"
-            className="form-input"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={loading}
-            required
-            autoComplete="email"
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="register-password">
-            Password
-          </label>
-          <input
-            id="register-password"
-            type="password"
-            className="form-input"
-            placeholder="At least 6 characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={loading}
-            required
-            autoComplete="new-password"
-          />
-        </div>
-
-        <button
-          type="submit"
-          className="btn-submit"
-          disabled={loading || Boolean(successMessage)}
-        >
-          {loading ? (
-            <>
-              <span className="btn-spinner"></span>
-              <span>Creating account...</span>
-            </>
-          ) : (
-            'Sign Up'
-          )}
-        </button>
-      </form>
-
-      <div className="auth-footer">
-        Already have an account?{' '}
-        <button
-          type="button"
-          className="auth-link"
-          onClick={() => onNavigate('/login')}
-          disabled={loading}
-        >
-          Sign In
-        </button>
       </div>
     </div>
   );

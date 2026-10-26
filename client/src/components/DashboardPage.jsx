@@ -1,14 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '../context/useAuth';
 import { fetchSkills } from '../services/skillService';
 import { fetchCareerGoal } from '../services/careerGoalService';
 import { fetchSkillGaps } from '../services/skillService';
 import { fetchRoadmap } from '../services/roadmapService';
+import { SKILL_CATEGORIES } from '../config/skillCatalog';
 import SkillForm from './SkillForm';
 import SkillItem from './SkillItem';
 import CareerGoalSection from './CareerGoalSection';
 import SkillGapSection from './SkillGapSection';
 import RoadmapSection from './RoadmapSection';
+import CareerReadinessCard from './CareerReadinessCard';
+import SkillSelectionModal from './SkillSelectionModal';
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -21,6 +24,10 @@ export function DashboardPage() {
   const [loadingSkills, setLoadingSkills] = useState(true);
   const [skillsError, setSkillsError] = useState(null);
 
+  // User Skills Search & Category Filter state
+  const [skillSearch, setSkillSearch] = useState('');
+  const [skillCategory, setSkillCategory] = useState('all');
+
   // 3. Skill Gap Analysis state
   const [gapData, setGapData] = useState(null);
   const [loadingGaps, setLoadingGaps] = useState(false);
@@ -30,6 +37,49 @@ export function DashboardPage() {
   const [roadmapData, setRoadmapData] = useState(null);
   const [loadingRoadmap, setLoadingRoadmap] = useState(false);
   const [roadmapError, setRoadmapError] = useState(null);
+
+  // 5. Skill Catalog Modal state
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+
+  // Map skill names to categories for user skill filtering
+  const skillCategoryLookup = useMemo(() => {
+    const map = new Map();
+    SKILL_CATEGORIES.forEach((cat) => {
+      cat.skills.forEach((s) => {
+        map.set(s.toLowerCase(), { id: cat.id, name: cat.name });
+      });
+    });
+    return map;
+  }, []);
+
+  // Filter user skills based on search query and category
+  const filteredSkills = useMemo(() => {
+    const query = skillSearch.trim().toLowerCase();
+    return skills.filter((s) => {
+      const matchesQuery = !query || s.name.toLowerCase().includes(query);
+      if (!matchesQuery) return false;
+
+      if (skillCategory === 'all') return true;
+
+      const catInfo = skillCategoryLookup.get(s.name.toLowerCase());
+      const catId = catInfo ? catInfo.id : 'custom';
+      return catId === skillCategory;
+    });
+  }, [skills, skillSearch, skillCategory, skillCategoryLookup]);
+
+  // Derive which categories exist among user's current skills
+  const availableUserCategories = useMemo(() => {
+    const catMap = new Map();
+    skills.forEach((s) => {
+      const catInfo = skillCategoryLookup.get(s.name.toLowerCase());
+      if (catInfo) {
+        catMap.set(catInfo.id, catInfo.name);
+      } else {
+        catMap.set('custom', 'Custom Skills');
+      }
+    });
+    return Array.from(catMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [skills, skillCategoryLookup]);
 
   // Helper to refresh Gaps and Roadmap when goal exists
   const refreshAnalysisAndRoadmap = useCallback(async (currentGoal) => {
@@ -64,145 +114,282 @@ export function DashboardPage() {
     setLoadingRoadmap(false);
   }, []);
 
-  // Initial dashboard load
+  // Initial load: Profile, Target Role, and Skills in parallel
   useEffect(() => {
     let isMounted = true;
 
-    async function initializeDashboard() {
+    async function loadInitialDashboard() {
       setLoadingSkills(true);
-      setSkillsError(null);
 
-      try {
-        const [skillsRes, goalRes] = await Promise.allSettled([
-          fetchSkills(),
-          fetchCareerGoal()
-        ]);
+      const [skillsResult, goalResult] = await Promise.allSettled([
+        fetchSkills(),
+        fetchCareerGoal()
+      ]);
 
-        if (!isMounted) return;
+      if (!isMounted) return;
 
-        let activeGoal = null;
-        if (goalRes.status === 'fulfilled' && goalRes.value) {
-          activeGoal = goalRes.value.targetRole || null;
-          setTargetRole(activeGoal);
-        }
+      let currentGoalRole = null;
 
-        if (skillsRes.status === 'fulfilled') {
-          setSkills(skillsRes.value || []);
-        } else {
-          setSkillsError(skillsRes.reason?.message || 'Failed to load skills.');
-        }
-        setLoadingSkills(false);
+      // Handle Career Goal
+      if (goalResult.status === 'fulfilled' && goalResult.value) {
+        currentGoalRole = goalResult.value.targetRole || null;
+        setTargetRole(currentGoalRole);
+      } else {
+        setTargetRole(null);
+      }
 
-        // If goal exists, fetch gaps and roadmap
-        if (activeGoal) {
-          refreshAnalysisAndRoadmap(activeGoal);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setSkillsError(err.message || 'Error initializing dashboard.');
-          setLoadingSkills(false);
-        }
+      // Handle Skills
+      if (skillsResult.status === 'fulfilled') {
+        setSkills(skillsResult.value || []);
+      } else {
+        setSkillsError(skillsResult.reason?.message || 'Failed to load skills.');
+      }
+      setLoadingSkills(false);
+
+      // Trigger Gaps & Roadmap if career goal exists
+      if (currentGoalRole) {
+        await refreshAnalysisAndRoadmap(currentGoalRole);
       }
     }
 
-    initializeDashboard();
+    loadInitialDashboard();
 
     return () => {
       isMounted = false;
     };
   }, [refreshAnalysisAndRoadmap]);
 
-  // Handler: Goal Saved / Updated
-  const handleGoalSaved = (newRole) => {
+  // Handler: Career goal saved
+  const handleGoalSaved = async (newRole) => {
     setTargetRole(newRole);
-    refreshAnalysisAndRoadmap(newRole);
+    await refreshAnalysisAndRoadmap(newRole);
   };
 
-  // Handler: Skill Added -> update list & refresh gaps/roadmap
-  const handleSkillAdded = (newSkill) => {
+  // Handler: Single Skill added
+  const handleSkillAdded = async (newSkill) => {
     setSkills((prev) => {
-      const existingIdx = prev.findIndex(
-        (s) => s.name.toLowerCase() === newSkill.name.toLowerCase()
+      const filtered = prev.filter(
+        (s) => s.name.toLowerCase() !== newSkill.name.toLowerCase()
       );
-      if (existingIdx !== -1) {
-        const updated = [...prev];
-        updated[existingIdx] = newSkill;
-        return updated;
-      }
-      return [newSkill, ...prev];
+      return [newSkill, ...filtered];
     });
 
     if (targetRole) {
-      refreshAnalysisAndRoadmap(targetRole);
+      await refreshAnalysisAndRoadmap(targetRole);
     }
   };
 
-  // Handler: Skill Updated -> update list & refresh gaps/roadmap
-  const handleSkillUpdated = (updatedSkill) => {
+  // Handler: Batch Skills added from catalog modal
+  const handleBatchSkillsAdded = async (updatedSkills) => {
+    if (Array.isArray(updatedSkills)) {
+      setSkills(updatedSkills);
+    } else {
+      // Re-fetch all
+      const latest = await fetchSkills();
+      setSkills(latest);
+    }
+
+    if (targetRole) {
+      await refreshAnalysisAndRoadmap(targetRole);
+    }
+  };
+
+  // Handler: Skill updated
+  const handleSkillUpdated = async (updatedSkill) => {
     setSkills((prev) =>
       prev.map((s) => (s._id === updatedSkill._id ? updatedSkill : s))
     );
 
     if (targetRole) {
-      refreshAnalysisAndRoadmap(targetRole);
+      await refreshAnalysisAndRoadmap(targetRole);
     }
   };
 
-  // Handler: Skill Deleted -> update list & refresh gaps/roadmap
-  const handleSkillDeleted = (deletedId) => {
+  // Handler: Skill deleted
+  const handleSkillDeleted = async (deletedId) => {
     setSkills((prev) => prev.filter((s) => s._id !== deletedId));
 
     if (targetRole) {
-      refreshAnalysisAndRoadmap(targetRole);
+      await refreshAnalysisAndRoadmap(targetRole);
     }
   };
 
-  const initials = user?.name
-    ? user.name
-        .split(' ')
-        .map((p) => p[0])
-        .join('')
-        .slice(0, 2)
-    : 'U';
+  // Handler: Milestone progress toggled in Roadmap
+  const handleMilestoneToggled = (skill, completed) => {
+    setRoadmapData((prev) => {
+      if (!prev || !prev.recommendations) return prev;
+      const updatedRecs = prev.recommendations.map((rec) =>
+        rec.skill === skill ? { ...rec, isCompleted: completed } : rec
+      );
+      const completedCount = updatedRecs.filter((r) => r.isCompleted).length;
+      const progressPercentage =
+        updatedRecs.length > 0
+          ? Math.round((completedCount / updatedRecs.length) * 100)
+          : 0;
+
+      return {
+        ...prev,
+        recommendations: updatedRecs,
+        summary: {
+          ...prev.summary,
+          completedMilestonesCount: completedCount,
+          progressPercentage
+        }
+      };
+    });
+  };
+
+  // Smooth scroll helpers
+  const handleScrollToCareerGoal = () => {
+    const el = document.getElementById('career-goal-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleScrollToSkills = () => {
+    const el = document.getElementById('skills-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleScrollToRoadmap = () => {
+    const el = document.getElementById('roadmap-section');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  };
 
   return (
-    <div className="dashboard-container">
-      {/* 1. Profile Overview */}
-      <section className="profile-overview-card" aria-label="User Profile">
-        <div className="profile-main">
-          <div className="profile-avatar">{initials}</div>
-          <div className="profile-details">
-            <h2>{user?.name || 'SkillForge User'}</h2>
-            <p className="profile-email">{user?.email || 'Authenticated User'}</p>
+    <div className="dashboard-layout">
+      {/* 1. Dashboard Welcome & Overview Bar */}
+      <section className="dashboard-welcome-banner" aria-label="Dashboard Overview">
+        <div className="welcome-content">
+          <div className="welcome-avatar">
+            {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
           </div>
-        </div>
-
-        <div className="profile-role-badge">
-          <span className="role-label">Target Role</span>
-          {targetRole ? (
-            <span className="role-value">{targetRole}</span>
-          ) : (
-            <span className="role-value none">No career goal selected yet</span>
-          )}
+          <div className="welcome-text">
+            <h2>Welcome, {user?.name || 'Engineer'}</h2>
+            <p>
+              Your career development dashboard &bull; Track proficiencies, analyze skill gaps, and complete milestones.
+            </p>
+          </div>
         </div>
       </section>
 
-      {/* 2. Career Goal Selection */}
+      {/* Quick Action Shortcuts Bar */}
+      <section className="dashboard-quick-actions" aria-label="Dashboard Quick Navigation">
+        <button
+          type="button"
+          className="quick-action-pill"
+          onClick={handleScrollToCareerGoal}
+        >
+          <span className="pill-icon">🎯</span>
+          <span>{targetRole ? `Goal: ${targetRole}` : 'Choose Career Goal'}</span>
+        </button>
+        <button
+          type="button"
+          className="quick-action-pill"
+          onClick={() => setIsLibraryOpen(true)}
+        >
+          <span className="pill-icon">📚</span>
+          <span>Skill Library</span>
+        </button>
+        <button
+          type="button"
+          className="quick-action-pill"
+          onClick={handleScrollToSkills}
+        >
+          <span className="pill-icon">⚡</span>
+          <span>Tracked Skills ({skills.length})</span>
+        </button>
+        {targetRole && (
+          <button
+            type="button"
+            className="quick-action-pill"
+            onClick={handleScrollToRoadmap}
+          >
+            <span className="pill-icon">🗺️</span>
+            <span>View Roadmap</span>
+          </button>
+        )}
+      </section>
+
+      {/* 2. Career Readiness Overview Card (Part C) */}
+      <CareerReadinessCard
+        targetRole={targetRole}
+        gapData={gapData}
+        onScrollToRoadmap={handleScrollToRoadmap}
+      />
+
+      {/* 3. Career Goal Selection */}
       <CareerGoalSection
         key={targetRole || 'no-goal'}
         currentRole={targetRole}
         onGoalSaved={handleGoalSaved}
       />
 
-      {/* 3. My Skills (CRUD) */}
-      <section className="skills-section" aria-label="Skills Management">
+      {/* 4. Skills Management (Searchable Library, Inline Editing & Category Filtering) */}
+      <section className="skills-section" id="skills-section" aria-label="Skills Management">
         <div className="section-header-row">
-          <h3>My Skills</h3>
-          <span className="count-pill">{skills.length} tracked</span>
+          <div className="section-title-group">
+            <h3>My Skills Profile</h3>
+            <p className="section-subtitle">
+              Manage your verified competencies, inline proficiency ratings, and category filters.
+            </p>
+          </div>
+          <span className="count-pill">{skills.length} skills tracked</span>
         </div>
 
-        {/* Add Skill Form */}
-        <SkillForm onSkillAdded={handleSkillAdded} />
+        {/* Skill Form & Library Trigger */}
+        <SkillForm
+          onSkillAdded={handleSkillAdded}
+          onOpenLibrary={() => setIsLibraryOpen(true)}
+        />
+
+        {/* User Skills Search & Category Filter Bar */}
+        {skills.length > 0 && (
+          <div className="user-skills-filter-card">
+            <div className="filter-input-wrapper">
+              <span className="filter-search-icon" aria-hidden="true">🔍</span>
+              <input
+                type="text"
+                className="user-skills-search-input"
+                placeholder="Search your skills..."
+                value={skillSearch}
+                onChange={(e) => setSkillSearch(e.target.value)}
+                aria-label="Search your added skills"
+              />
+              {skillSearch && (
+                <button
+                  type="button"
+                  className="btn-clear-search"
+                  onClick={() => setSkillSearch('')}
+                  aria-label="Clear search query"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {availableUserCategories.length > 1 && (
+              <div className="user-skills-category-chips" role="radiogroup" aria-label="Filter by category">
+                <button
+                  type="button"
+                  className={`category-filter-chip ${skillCategory === 'all' ? 'active' : ''}`}
+                  onClick={() => setSkillCategory('all')}
+                >
+                  All ({skills.length})
+                </button>
+                {availableUserCategories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`category-filter-chip ${skillCategory === cat.id ? 'active' : ''}`}
+                    onClick={() => setSkillCategory(cat.id)}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Loading State */}
         {loadingSkills && (
@@ -220,19 +407,43 @@ export function DashboardPage() {
           </div>
         )}
 
-        {/* Empty State */}
+        {/* Empty State when no skills exist at all */}
         {!loadingSkills && !skillsError && skills.length === 0 && (
           <div className="empty-skills-box">
             <div className="empty-icon">🎯</div>
             <h4>No skills added yet</h4>
-            <p>Add your first skill above to begin tracking your proficiencies.</p>
+            <p>Browse our curated library or add your custom competencies above to start your gap analysis.</p>
+            <button
+              type="button"
+              className="btn-browse-library mt-3"
+              onClick={() => setIsLibraryOpen(true)}
+            >
+              📚 Browse 100+ Skill Library
+            </button>
+          </div>
+        )}
+
+        {/* Filtered Empty State when search has no matches */}
+        {!loadingSkills && skills.length > 0 && filteredSkills.length === 0 && (
+          <div className="empty-filter-state">
+            <p>No skills found matching &ldquo;{skillSearch}&rdquo;.</p>
+            <button
+              type="button"
+              className="btn-action-sm btn-cancel mt-2"
+              onClick={() => {
+                setSkillSearch('');
+                setSkillCategory('all');
+              }}
+            >
+              Reset Filter
+            </button>
           </div>
         )}
 
         {/* Skills List */}
-        {!loadingSkills && skills.length > 0 && (
+        {!loadingSkills && filteredSkills.length > 0 && (
           <div className="skills-list" role="list">
-            {skills.map((skill) => (
+            {filteredSkills.map((skill) => (
               <SkillItem
                 key={skill._id}
                 skill={skill}
@@ -244,7 +455,7 @@ export function DashboardPage() {
         )}
       </section>
 
-      {/* 4. Skill Gap Analysis */}
+      {/* 5. Skill Gap Analysis */}
       <SkillGapSection
         gapData={gapData}
         loading={loadingGaps}
@@ -253,13 +464,22 @@ export function DashboardPage() {
         onRetry={() => refreshAnalysisAndRoadmap(targetRole)}
       />
 
-      {/* 5. Personalized Learning Roadmap */}
+      {/* 6. Personalized Learning Roadmap with Real Progress Tracking (Part D) */}
       <RoadmapSection
         roadmapData={roadmapData}
         loading={loadingRoadmap}
         error={roadmapError}
         hasCareerGoal={Boolean(targetRole)}
         onRetry={() => refreshAnalysisAndRoadmap(targetRole)}
+        onMilestoneToggled={handleMilestoneToggled}
+      />
+
+      {/* 7. Searchable Skill Selection Modal (Part B) */}
+      <SkillSelectionModal
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        existingSkills={skills}
+        onSkillsAdded={handleBatchSkillsAdded}
       />
     </div>
   );

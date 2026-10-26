@@ -9,6 +9,13 @@
   box-sizing: border-box;
 }
 
+.content-area {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
 .app-header {
   margin-bottom: 28px;
 }

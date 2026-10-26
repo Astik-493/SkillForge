@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { addSkill, PROFICIENCY_LEVELS } from '../services/skillService';
 
-export function SkillForm({ onSkillAdded }) {
+export function SkillForm({ onSkillAdded, onOpenLibrary }) {
   const [name, setName] = useState('');
   const [proficiency, setProficiency] = useState(3);
   const [loading, setLoading] = useState(false);
@@ -33,7 +33,7 @@ export function SkillForm({ onSkillAdded }) {
         proficiency: numProficiency
       });
 
-      setSuccess(`Added "${trimmedName}" successfully!`);
+      setSuccess(`Added "${trimmedName}" (Level ${numProficiency}) successfully!`);
       setName('');
       setProficiency(3);
 
@@ -54,9 +54,24 @@ export function SkillForm({ onSkillAdded }) {
 
   return (
     <div className="skill-form-card">
-      <div className="card-header-compact">
-        <h3>Add New Skill</h3>
-        <span className="section-badge">Proficiency 1–5</span>
+      {/* Top Banner: Quick Action Bar */}
+      <div className="skill-actions-banner">
+        <div className="skill-actions-intro">
+          <h4>Manage Your Technical Profile</h4>
+          <p>
+            Choose from our curated 100+ skill catalog or quickly add custom proficiencies.
+          </p>
+        </div>
+        {onOpenLibrary && (
+          <button
+            type="button"
+            className="btn-browse-library"
+            onClick={onOpenLibrary}
+          >
+            <span className="btn-icon">📚</span>
+            <span>Browse Skill Library</span>
+          </button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="skill-form" noValidate>
@@ -77,13 +92,13 @@ export function SkillForm({ onSkillAdded }) {
         <div className="form-row-grid">
           <div className="form-group flex-2">
             <label className="form-label" htmlFor="skill-name-input">
-              Skill Name
+              Quick Add Custom Skill
             </label>
             <input
               id="skill-name-input"
               type="text"
               className="form-input"
-              placeholder="e.g. React, Python, MongoDB"
+              placeholder="e.g. React, Python, MongoDB, Kubernetes"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={loading}
@@ -93,7 +108,7 @@ export function SkillForm({ onSkillAdded }) {
 
           <div className="form-group flex-1">
             <label className="form-label" htmlFor="skill-proficiency-select">
-              Proficiency Level
+              Proficiency (1 to 5)
             </label>
             <select
               id="skill-proficiency-select"
@@ -104,7 +119,7 @@ export function SkillForm({ onSkillAdded }) {
             >
               {PROFICIENCY_LEVELS.map((lvl) => (
                 <option key={lvl.value} value={lvl.value}>
-                  {lvl.value} - {lvl.label}
+                  L{lvl.value} - {lvl.label}
                 </option>
               ))}
             </select>

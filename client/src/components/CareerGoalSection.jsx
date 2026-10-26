@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SUPPORTED_ROLES, saveCareerGoal } from '../services/careerGoalService';
+import { SUPPORTED_ROLES, ROLE_METADATA, saveCareerGoal } from '../services/careerGoalService';
 
 export function CareerGoalSection({ currentRole, onGoalSaved }) {
   const [selectedRole, setSelectedRole] = useState(currentRole || '');
@@ -38,14 +38,15 @@ export function CareerGoalSection({ currentRole, onGoalSaved }) {
   };
 
   const hasChanged = selectedRole && selectedRole !== (currentRole || '');
+  const activeMeta = selectedRole ? ROLE_METADATA[selectedRole] : null;
 
   return (
-    <div className="career-goal-card" aria-label="Career Goal Selection">
+    <div className="career-goal-card" id="career-goal-section" aria-label="Career Goal Selection">
       <div className="card-header-compact">
         <div className="goal-title-group">
-          <h3>Career Goal Selection</h3>
+          <h3>Target Career Role</h3>
           <p className="goal-subtitle">
-            Choose your target career path to analyze skill gaps and generate a personalized roadmap.
+            Choose an engineering track to benchmark your skills, calculate gap readiness, and unlock curated roadmaps.
           </p>
         </div>
         {currentRole ? (
@@ -53,7 +54,7 @@ export function CareerGoalSection({ currentRole, onGoalSaved }) {
             Active: <strong>{currentRole}</strong>
           </span>
         ) : (
-          <span className="goal-empty-pill">No goal selected yet</span>
+          <span className="goal-empty-pill">No role selected yet</span>
         )}
       </div>
 
@@ -75,7 +76,7 @@ export function CareerGoalSection({ currentRole, onGoalSaved }) {
         <div className="goal-controls-row">
           <div className="form-group flex-1">
             <label className="form-label" htmlFor="career-role-select">
-              Target Career Role
+              Select Target Role ({SUPPORTED_ROLES.length} Available Tracks)
             </label>
             <select
               id="career-role-select"
@@ -85,11 +86,11 @@ export function CareerGoalSection({ currentRole, onGoalSaved }) {
               disabled={saving}
             >
               <option value="" disabled>
-                -- Select a target role --
+                -- Choose a supported career path --
               </option>
               {SUPPORTED_ROLES.map((role) => (
                 <option key={role} value={role}>
-                  {role}
+                  {role} {ROLE_METADATA[role]?.category ? `(${ROLE_METADATA[role].category})` : ''}
                 </option>
               ))}
             </select>
@@ -115,6 +116,28 @@ export function CareerGoalSection({ currentRole, onGoalSaved }) {
             </button>
           </div>
         </div>
+
+        {/* Selected Role Insight Preview */}
+        {activeMeta && (
+          <div className="role-preview-card">
+            <div className="role-preview-header">
+              <span className="role-preview-category">{activeMeta.category}</span>
+              <p className="role-preview-desc">{activeMeta.description}</p>
+            </div>
+            {activeMeta.coreSkills && (
+              <div className="role-preview-skills">
+                <span className="preview-skills-label">Core Competencies:</span>
+                <div className="preview-skills-list">
+                  {activeMeta.coreSkills.map((s) => (
+                    <span key={s} className="preview-skill-tag">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </form>
     </div>
   );

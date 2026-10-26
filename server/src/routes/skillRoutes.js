@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   addSkill,
+  addSkillsBatch,
   getSkills,
   updateSkill,
   deleteSkill,
@@ -16,7 +17,10 @@ router.use(protect);
 // GET /api/skills/gaps - Get skill gaps based on career goal
 router.get('/gaps', getSkillGaps);
 
-// POST /api/skills - Add skill
+// POST /api/skills/batch - Batch add or update multiple skills
+router.post('/batch', addSkillsBatch);
+
+// POST /api/skills - Add single skill
 router.post('/', addSkill);
 
 // GET /api/skills - Get all skills for current user

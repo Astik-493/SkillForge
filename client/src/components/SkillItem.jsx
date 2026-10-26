@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   updateSkill,
   deleteSkill,
@@ -14,6 +14,18 @@ export function SkillItem({ skill, onSkillUpdated, onSkillDeleted }) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+
+  const formattedDate = useMemo(() => {
+    const raw = skill.updatedAt || skill.createdAt;
+    if (!raw) return null;
+    const dateObj = new Date(raw);
+    if (isNaN(dateObj.getTime())) return null;
+    return dateObj.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }, [skill.updatedAt, skill.createdAt]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -143,6 +155,14 @@ export function SkillItem({ skill, onSkillUpdated, onSkillDeleted }) {
               <span className={`proficiency-pill level-${skill.proficiency}`}>
                 Level {skill.proficiency} &bull; {getProficiencyLabel(skill.proficiency)}
               </span>
+              {formattedDate && (
+                <span
+                  className="skill-date-pill"
+                  title={`Last updated on ${formattedDate}`}
+                >
+                  🕒 {formattedDate}
+                </span>
+              )}
             </div>
 
             {/* Visual 5-step proficiency meter */}

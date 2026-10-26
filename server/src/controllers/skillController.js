@@ -75,6 +75,86 @@ export const addSkill = async (req, res) => {
 };
 
 /**
+ * Add or update multiple skills in batch for the authenticated user
+ * POST /api/skills/batch
+ */
+export const addSkillsBatch = async (req, res) => {
+  try {
+    const { skills } = req.body;
+
+    if (!Array.isArray(skills) || skills.length === 0) {
+      return res.status(400).json({
+        message: 'Skills array must contain at least one skill'
+      });
+    }
+
+    // Validate all items in payload
+    for (const item of skills) {
+      if (!item.name || typeof item.name !== 'string' || !item.name.trim()) {
+        return res.status(400).json({
+          message: 'All skills must have a valid name'
+        });
+      }
+      const prof = item.proficiency;
+      if (
+        prof === undefined ||
+        prof === null ||
+        typeof prof !== 'number' ||
+        !Number.isInteger(prof) ||
+        prof < 1 ||
+        prof > 5
+      ) {
+        return res.status(400).json({
+          message: `Invalid proficiency for skill "${item.name}". Must be an integer between 1 and 5.`
+        });
+      }
+    }
+
+    const added = [];
+    const updated = [];
+
+    // Process each skill safely with escaped regex
+    for (const item of skills) {
+      const trimmedName = item.name.trim();
+      const proficiency = item.proficiency;
+
+      const existingSkill = await Skill.findOne({
+        user: req.user._id,
+        name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') }
+      });
+
+      if (existingSkill) {
+        existingSkill.proficiency = proficiency;
+        await existingSkill.save();
+        updated.push(existingSkill);
+      } else {
+        const newSkill = await Skill.create({
+          user: req.user._id,
+          name: trimmedName,
+          proficiency
+        });
+        added.push(newSkill);
+      }
+    }
+
+    // Fetch full updated skills list
+    const allSkills = await Skill.find({ user: req.user._id }).sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      message: `Batch processed successfully: ${added.length} added, ${updated.length} updated.`,
+      addedCount: added.length,
+      updatedCount: updated.length,
+      skills: allSkills
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: 'Server error while processing batch skills',
+      error: error.message
+    });
+  }
+};
+
+/**
  * Get all skills for the authenticated user
  * GET /api/skills
  */
@@ -237,15 +317,19 @@ export const calculateSkillGaps = (roleRequirements, userSkills = []) => {
     userSkillMap.set(s.name.trim().toLowerCase(), s.proficiency);
   });
 
-  // Compare every required skill against current proficiency
   let achievedSkillsCount = 0;
   let skillsNeedingImprovementCount = 0;
   let missingSkillsCount = 0;
+  let totalRequiredPoints = 0;
+  let totalEarnedPoints = 0;
 
   const gaps = Object.entries(roleRequirements).map(([skillName, requiredProficiency]) => {
     const normalizedSkill = skillName.trim().toLowerCase();
     const hasSkill = userSkillMap.has(normalizedSkill);
     const currentProficiency = hasSkill ? userSkillMap.get(normalizedSkill) : 0;
+
+    totalRequiredPoints += requiredProficiency;
+    totalEarnedPoints += Math.min(currentProficiency, requiredProficiency);
 
     let status;
     if (!hasSkill) {
@@ -259,15 +343,40 @@ export const calculateSkillGaps = (roleRequirements, userSkills = []) => {
       achievedSkillsCount++;
     }
 
-    // Gap calculation: never negative
+    // Exact gap calculation: never negative
     const gap = Math.max(0, requiredProficiency - currentProficiency);
+
+    // Spectrum analysis & severity rating
+    let severity;
+    let impact;
+    if (gap >= 3) {
+      severity = 'critical';
+      impact = 'High Impact';
+    } else if (gap === 2) {
+      severity = 'moderate';
+      impact = 'Medium Impact';
+    } else if (gap === 1) {
+      severity = 'minor';
+      impact = 'Low Impact';
+    } else {
+      severity = 'met';
+      impact = 'Fulfilled';
+    }
+
+    const completionPercentage = Math.min(
+      100,
+      Math.round((currentProficiency / requiredProficiency) * 100)
+    );
 
     return {
       skill: skillName,
       currentProficiency,
       requiredProficiency,
       gap,
-      status
+      status,
+      severity,
+      impact,
+      completionPercentage
     };
   });
 
@@ -275,13 +384,27 @@ export const calculateSkillGaps = (roleRequirements, userSkills = []) => {
   gaps.sort((a, b) => b.gap - a.gap || a.skill.localeCompare(b.skill));
 
   const totalRequiredSkills = Object.keys(roleRequirements).length;
+  const readinessPercentage =
+    totalRequiredPoints > 0
+      ? Math.round((totalEarnedPoints / totalRequiredPoints) * 100)
+      : 0;
+
+  const readinessExplanation =
+    `Readiness score reflects competency points earned toward target role benchmarks (${totalEarnedPoints} of ${totalRequiredPoints} points, or ${readinessPercentage}%). Requirements serve as structured career goals.`;
 
   return {
     gaps,
     totalRequiredSkills,
     achievedSkillsCount,
     skillsNeedingImprovementCount,
-    missingSkillsCount
+    missingSkillsCount,
+    totalRequiredPoints,
+    totalEarnedPoints,
+    readinessPercentage,
+    readinessExplanation,
+    criticalGapsCount: gaps.filter((g) => g.severity === 'critical').length,
+    moderateGapsCount: gaps.filter((g) => g.severity === 'moderate').length,
+    minorGapsCount: gaps.filter((g) => g.severity === 'minor').length
   };
 };
 
@@ -319,7 +442,14 @@ export const getSkillGaps = async (req, res) => {
       totalRequiredSkills,
       achievedSkillsCount,
       skillsNeedingImprovementCount,
-      missingSkillsCount
+      missingSkillsCount,
+      totalRequiredPoints,
+      totalEarnedPoints,
+      readinessPercentage,
+      readinessExplanation,
+      criticalGapsCount,
+      moderateGapsCount,
+      minorGapsCount
     } = calculateSkillGaps(roleRequirements, userSkills);
 
     const summary = {
@@ -327,7 +457,14 @@ export const getSkillGaps = async (req, res) => {
       totalRequiredSkills,
       achievedSkillsCount,
       skillsNeedingImprovementCount,
-      missingSkillsCount
+      missingSkillsCount,
+      totalRequiredPoints,
+      totalEarnedPoints,
+      readinessPercentage,
+      readinessExplanation,
+      criticalGapsCount,
+      moderateGapsCount,
+      minorGapsCount
     };
 
     return res.status(200).json({
@@ -338,6 +475,13 @@ export const getSkillGaps = async (req, res) => {
       achievedSkillsCount,
       skillsNeedingImprovementCount,
       missingSkillsCount,
+      totalRequiredPoints,
+      totalEarnedPoints,
+      readinessPercentage,
+      readinessExplanation,
+      criticalGapsCount,
+      moderateGapsCount,
+      minorGapsCount,
       gaps,
       skillGaps: gaps
     });

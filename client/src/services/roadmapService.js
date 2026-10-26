@@ -39,3 +39,34 @@ export async function fetchRoadmap() {
     throw error;
   }
 }
+
+/**
+ * Fetch roadmap milestone progress records for active target role.
+ * Connects to GET /api/roadmap/progress.
+ * @returns {Promise<{ targetRole: string, progress: Array<object>, completedCount: number } | null>}
+ */
+export async function fetchRoadmapProgress() {
+  try {
+    return await apiFetch('/roadmap/progress');
+  } catch (error) {
+    if (error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Update milestone completion status.
+ * Connects to PUT /api/roadmap/progress.
+ * @param {string} skill - Skill name
+ * @param {boolean} completed - Completion status
+ * @returns {Promise<{ message: string, progress: object }>}
+ */
+export async function updateRoadmapProgress(skill, completed) {
+  return apiFetch('/roadmap/progress', {
+    method: 'PUT',
+    body: JSON.stringify({ skill, completed })
+  });
+}
+
