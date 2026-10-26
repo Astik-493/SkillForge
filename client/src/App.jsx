@@ -8,6 +8,7 @@ import DashboardPage from './components/DashboardPage';
 import './App.css';
 import './styles/auth.css';
 import './styles/skills.css';
+import './styles/milestone14c.css';
 
 function AppShell() {
   const { isAuthenticated, loading } = useAuth();
@@ -62,7 +63,7 @@ function AppShell() {
 
       <div className="app-container">
         <header className="app-header">
-          <span className="env-badge">Milestone 14B</span>
+          <span className="env-badge">Milestone 14C</span>
           <h1>SkillForge</h1>
           <p className="subtitle">Student Skill Gap Engine &amp; Learning Roadmap</p>
         </header>

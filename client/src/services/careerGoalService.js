@@ -1,5 +1,13 @@
 import { apiFetch } from './api';
 
+export const SUPPORTED_ROLES = [
+  'Frontend Developer',
+  'Backend Developer',
+  'Full Stack Developer',
+  'Data Analyst',
+  'Machine Learning Engineer'
+];
+
 /**
  * Fetch the authenticated user's career goal.
  * Connects to GET /api/career-goal.
@@ -17,4 +25,18 @@ export async function fetchCareerGoal() {
     }
     throw error;
   }
+}
+
+/**
+ * Save or update the authenticated user's target career goal.
+ * Connects to PUT /api/career-goal.
+ *
+ * @param {string} targetRole
+ * @returns {Promise<{ message: string, careerGoal: { targetRole: string } }>}
+ */
+export async function saveCareerGoal(targetRole) {
+  return apiFetch('/career-goal', {
+    method: 'PUT',
+    body: JSON.stringify({ targetRole })
+  });
 }

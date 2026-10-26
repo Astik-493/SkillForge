@@ -9,12 +9,13 @@ export const PROFICIENCY_LEVELS = [
 ];
 
 /**
- * Returns the human-readable proficiency label for a numeric level (1-5).
+ * Returns the human-readable proficiency label for a numeric level (0-5).
  * @param {number|string} value
  * @returns {string}
  */
 export function getProficiencyLabel(value) {
   const num = Number(value);
+  if (num === 0) return 'Not Started';
   const found = PROFICIENCY_LEVELS.find((p) => p.value === num);
   return found ? found.label : `Level ${num}`;
 }
@@ -70,4 +71,39 @@ export async function deleteSkill(id) {
   return apiFetch(`/skills/${id}`, {
     method: 'DELETE'
   });
+}
+
+/**
+ * Fetch skill gaps based on authenticated user's target career goal.
+ * Connects to GET /api/skills/gaps.
+ * If no career goal exists (404), returns null or object indicating no goal.
+ *
+ * @returns {Promise<{
+ *   targetRole: string,
+ *   summary: {
+ *     targetRole: string,
+ *     totalRequiredSkills: number,
+ *     achievedSkillsCount: number,
+ *     skillsNeedingImprovementCount: number,
+ *     missingSkillsCount: number
+ *   },
+ *   gaps: Array<{
+ *     skill: string,
+ *     currentProficiency: number,
+ *     requiredProficiency: number,
+ *     gap: number,
+ *     status: 'missing' | 'needs_improvement' | 'achieved'
+ *   }>
+ * } | null>}
+ */
+export async function fetchSkillGaps() {
+  try {
+    const result = await apiFetch('/skills/gaps');
+    return result;
+  } catch (error) {
+    if (error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }
