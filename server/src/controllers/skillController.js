@@ -3,6 +3,9 @@ import Skill from '../models/skill.model.js';
 import CareerGoal from '../models/careerGoal.model.js';
 import { ROLE_REQUIREMENTS } from '../config/roleRequirements.js';
 
+// Helper to safely escape user input for regular expressions
+const escapeRegex = (string) => string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
  * Add a new skill for the authenticated user
  * POST /api/skills
@@ -34,10 +37,10 @@ export const addSkill = async (req, res) => {
 
     const trimmedName = name.trim();
 
-    // 3. Check for existing duplicate skill for this user
+    // 3. Check for existing duplicate skill for this user (safely escaped)
     const existingSkill = await Skill.findOne({
       user: req.user._id,
-      name: { $regex: new RegExp(`^${trimmedName}$`, 'i') }
+      name: { $regex: new RegExp(`^${escapeRegex(trimmedName)}$`, 'i') }
     });
 
     if (existingSkill) {
@@ -126,11 +129,11 @@ export const updateSkill = async (req, res) => {
       }
       updates.name = name.trim();
 
-      // Check for duplicate skill name under same user (excluding this skill)
+      // Check for duplicate skill name under same user (excluding this skill, safely escaped)
       const duplicateSkill = await Skill.findOne({
         user: req.user._id,
         _id: { $ne: id },
-        name: { $regex: new RegExp(`^${updates.name}$`, 'i') }
+        name: { $regex: new RegExp(`^${escapeRegex(updates.name)}$`, 'i') }
       });
 
       if (duplicateSkill) {
@@ -159,7 +162,7 @@ export const updateSkill = async (req, res) => {
     const updatedSkill = await Skill.findOneAndUpdate(
       { _id: id, user: req.user._id },
       updates,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!updatedSkill) {
