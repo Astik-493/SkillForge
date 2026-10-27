@@ -1,3 +1,9 @@
+## Project Demo Video
+
+🎬 [Watch SkillForge Demo](https://drive.google.com/file/d/16kp9fpYoGRliw6JOwzja6SdXpesP98ts/view?usp=sharing)
+
+---
+
 # SkillForge
 
 **Personalized Developer Career Readiness, Skill Gap Analysis & Learning Roadmap Platform**
